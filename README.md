@@ -1,6 +1,6 @@
 # spaCy powered Label Studio ML backend
 
-NER label tasks are only supported currently.
+Power up Label Studio with ner and textcat spacy models.
 
 ## Usage
 

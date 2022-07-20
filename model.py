@@ -7,7 +7,7 @@ from pathlib import Path
 import spacy
 from label_studio_ml.model import LabelStudioMLBase
 from spacy.cli.train import train
-from spacy.tokens import DocBin
+from spacy.tokens import DocBin, Doc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -27,7 +27,7 @@ def split_annotations(annotations, split=0.15):
     return train_data, dev_data
 
 
-def annotations_to_docbin(annotations, valid_labels: list[str]):
+def annotations_to_docbin(annotations, valid_labels: list[str],):
     nlp = spacy.blank("en")
     db = DocBin()
 
@@ -35,33 +35,43 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
         if not item['data']['text']:
             continue
 
-        text = item['data']['text']
+        doc = nlp(item['data']['text'])
         annotation = item['annotations'][0]
-        doc = nlp(text)
-        ents = []
 
         for a in annotation['result']:
-            if a['type'] != 'labels':
-                continue
+            if a['type'] == 'labels':
+                add_label_to_doc(doc, item, a, valid_labels)
+            elif a['type'] == 'choices':
+                add_cat_to_doc(doc, a, valid_labels)
 
-            val = a['value']
-            label = val['labels'][0]
-
-            if label not in valid_labels:
-                continue
-
-            span = doc.char_span(
-                val['start'], val['end'], label=label)
-            if span:
-                ents.append(span)
-            else:
-                logger.info("BAD SPAN: %s DOC ID: %s",
-                            text[val['start']:val['end']], item['id'])
-
-        doc.ents = ents
         db.add(doc)
 
     return db
+
+
+def add_label_to_doc(doc: Doc, item, a, valid_labels: list[str]):
+    val = a['value']
+    label = val['labels'][0]
+
+    if label not in valid_labels:
+        return
+
+    span = doc.char_span(
+        val['start'], val['end'], label=label)
+    if span:
+        doc.ents = doc.ents + (span,)
+    else:
+        text = item['data']['text']
+        logger.info("BAD SPAN: %s DOC ID: %s",
+                    text[val['start']:val['end']], item['id'])
+
+
+def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
+    val = annotation['value']
+    selected = val['choices']
+
+    for choice in valid_choices:
+        doc.cats[choice] = choice in selected
 
 
 class SpacyModel(LabelStudioMLBase):
@@ -73,7 +83,7 @@ class SpacyModel(LabelStudioMLBase):
         from_name, schema = list(self.parsed_label_config.items())[0]
         self.from_name = from_name
         self.to_name = schema['to_name'][0]
-        self.labels = schema['labels']
+        self.labels = schema['labels'] if 'labels' in schema else []
         self.model = self.latest_model()
         self.model_version = self.train_output['checkpoint'] if 'checkpoint' in self.train_output else 'fallback'
 
@@ -117,6 +127,18 @@ class SpacyModel(LabelStudioMLBase):
                     }
                 })
 
+            choices = [choice for choice, score in doc.cats.items()
+                       if score >= 0.5]
+            if len(choices) > 0:
+                results.append({
+                    'from_name': self.from_name,
+                    'to_name': self.to_name,
+                    'type': 'choices',
+                    'value': {
+                        'choices': choices
+                    }
+                })
+
             predictions.append({
                 'model_version': self.model_version,
                 'result': results
@@ -145,8 +167,10 @@ class SpacyModel(LabelStudioMLBase):
         annotations = list(filter(item_not_cancelled, list(annotations)))
 
         train_data, dev_data = split_annotations(annotations, dev_split)
-        annotations_to_docbin(train_data, self.labels).to_disk(train_data_path)
-        annotations_to_docbin(dev_data, self.labels).to_disk(dev_data_path)
+        annotations_to_docbin(
+            train_data, valid_labels=self.labels).to_disk(train_data_path)
+        annotations_to_docbin(
+            dev_data, valid_labels=self.labels).to_disk(dev_data_path)
 
         print(train_data_path, dev_data_path)
         train(config_path, checkpoint_dir, overrides={
