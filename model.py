@@ -9,6 +9,14 @@ from label_studio_ml.model import LabelStudioMLBase
 from spacy.cli.train import train
 from spacy.tokens import DocBin, Doc
 
+# Constants
+
+DEV_DATA_SPLIT = 0.1
+USE_GPU = -1
+TEXTCAT_SCORE_THRESHOLD = 0.5
+
+# END constants
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -17,7 +25,7 @@ def item_not_cancelled(item):
     return item['annotations'][0]['was_cancelled'] != True
 
 
-def split_annotations(annotations, split=0.15):
+def split_annotations(annotations, split=DEV_DATA_SPLIT):
     random.shuffle(annotations)
 
     dev_len = round(len(annotations) * split)
@@ -87,7 +95,7 @@ class SpacyModel(LabelStudioMLBase):
         self.model = self.latest_model()
         self.model_version = self.train_output['checkpoint'] if 'checkpoint' in self.train_output else 'fallback'
 
-        logger.info("USING MODEL: %s", self.model_version)
+        logger.info("MODEL CHECKPOINT: %s", self.model_version)
 
     def latest_model(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
@@ -128,7 +136,7 @@ class SpacyModel(LabelStudioMLBase):
                 })
 
             choices = [choice for choice, score in doc.cats.items()
-                       if score >= 0.5]
+                       if score >= TEXTCAT_SCORE_THRESHOLD]
             if len(choices) > 0:
                 results.append({
                     'from_name': self.from_name,
@@ -173,7 +181,7 @@ class SpacyModel(LabelStudioMLBase):
             dev_data, valid_labels=self.labels).to_disk(dev_data_path)
 
         print(train_data_path, dev_data_path)
-        train(config_path, checkpoint_dir, overrides={
+        train(config_path, checkpoint_dir, use_gpu=USE_GPU, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
 
         os.symlink(model_path, latest_path_tmp)
