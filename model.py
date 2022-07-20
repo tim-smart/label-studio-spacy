@@ -10,6 +10,7 @@ from spacy.cli.train import train
 from spacy.tokens import DocBin
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def item_not_cancelled(item):
@@ -49,11 +50,13 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
             if label not in valid_labels:
                 continue
 
-            span = doc.char_span(val['start'], val['end'], label=label)
+            span = doc.char_span(
+                val['start'], val['end'], label=label)
             if span:
                 ents.append(span)
             else:
-                print("BAD SPAN", text[val['start']:val['end']])
+                logger.info("BAD SPAN: %s DOC ID: %s",
+                            text[val['start']:val['end']], item['id'])
 
         doc.ents = ents
         db.add(doc)
@@ -73,6 +76,8 @@ class SpacyModel(LabelStudioMLBase):
         self.labels = schema['labels']
         self.model = self.latest_model()
         self.model_version = self.train_output['checkpoint'] if 'checkpoint' in self.train_output else 'fallback'
+
+        logger.info("USING MODEL: %s", self.model_version)
 
     def latest_model(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
@@ -132,6 +137,8 @@ class SpacyModel(LabelStudioMLBase):
         train_data_path = os.path.join(checkpoint_dir, 'train.spacy')
         dev_data_path = os.path.join(checkpoint_dir, 'dev.spacy')
         model_path = os.path.join(checkpoint_dir, 'model-best')
+        latest_path = os.path.join(model_dir, "latest-model")
+        latest_path_tmp = os.path.join(model_dir, "latest-model-tmp")
 
         Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
@@ -144,5 +151,8 @@ class SpacyModel(LabelStudioMLBase):
         print(train_data_path, dev_data_path)
         train(config_path, checkpoint_dir, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
+
+        os.symlink(model_path, latest_path_tmp)
+        os.replace(latest_path_tmp, latest_path)
 
         return {'model_path': model_path, 'checkpoint': checkpoint_name}

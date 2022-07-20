@@ -26,4 +26,4 @@ label-studio-ml init my_ml_backend
 label-studio-ml start my_ml_backend
 ```
 
-6. As you train new models, they will appear in a `checkpoints` directory.
+6. As you train new models, they will appear in a `checkpoints` directory. The latest checkpoint will be symlinked to `latest-model`.
