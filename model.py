@@ -100,6 +100,9 @@ class SpacyModel(LabelStudioMLBase):
     def latest_model(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
         fallback_dir = os.path.join(model_dir, "model-best")
+        
+        if USE_GPU > -1:
+            spacy.require_gpu(gpu_id=USE_GPU)
 
         if 'model_path' in self.train_output and os.path.isdir(self.train_output['model_path']):
             return spacy.load(self.train_output['model_path'])
