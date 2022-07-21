@@ -11,77 +11,20 @@ from spacy.tokens import DocBin, Doc
 
 # Constants
 
-USE_GPU_TRAIN = -1
-USE_GPU_PREDICT = -1
+# GPU ID's to use. -1 means use the CPU
+TRAIN_GPU_ID = -1
+PREDICTION_GPU_ID = -1
 
+# Fraction of data to use for evaluation
 DEV_DATA_SPLIT = 0.1
+
+# Score threshold for a category to be accepted
 TEXTCAT_SCORE_THRESHOLD = 0.5
 
 # END constants
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-def item_not_cancelled(item):
-    return item['annotations'][0]['was_cancelled'] != True
-
-
-def split_annotations(annotations, split):
-    random.shuffle(annotations)
-
-    dev_len = round(len(annotations) * split)
-    train_data = annotations[dev_len:]
-    dev_data = annotations[:dev_len]
-
-    return train_data, dev_data
-
-
-def annotations_to_docbin(annotations, valid_labels: list[str],):
-    nlp = spacy.blank("en")
-    db = DocBin()
-
-    for item in annotations:
-        if not item['data']['text']:
-            continue
-
-        doc = nlp(item['data']['text'])
-        annotation = item['annotations'][0]
-
-        for a in annotation['result']:
-            if a['type'] == 'labels':
-                add_label_to_doc(doc, item, a, valid_labels)
-            elif a['type'] == 'choices':
-                add_cat_to_doc(doc, a, valid_labels)
-
-        db.add(doc)
-
-    return db
-
-
-def add_label_to_doc(doc: Doc, item, a, valid_labels: list[str]):
-    val = a['value']
-    label = val['labels'][0]
-
-    if label not in valid_labels:
-        return
-
-    span = doc.char_span(
-        val['start'], val['end'], label=label)
-    if span:
-        doc.ents = doc.ents + (span,)
-    else:
-        text = item['data']['text']
-        logger.info("BAD SPAN: %s DOC ID: %s",
-                    text[val['start']:val['end']], item['id'])
-
-
-def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
-    val = annotation['value']
-    selected = val['choices']
-
-    for choice in valid_choices:
-        doc.cats[choice] = choice in selected
 
 
 class SpacyModel(LabelStudioMLBase):
@@ -103,8 +46,8 @@ class SpacyModel(LabelStudioMLBase):
         model_dir = os.path.dirname(os.path.realpath(__file__))
         fallback_dir = os.path.join(model_dir, "model-best")
 
-        if USE_GPU_PREDICT > -1:
-            spacy.prefer_gpu(gpu_id=USE_GPU_PREDICT)
+        if PREDICTION_GPU_ID > -1:
+            spacy.prefer_gpu(gpu_id=PREDICTION_GPU_ID)
 
         if 'model_path' in self.train_output and os.path.isdir(self.train_output['model_path']):
             return spacy.load(self.train_output['model_path'])
@@ -119,7 +62,7 @@ class SpacyModel(LabelStudioMLBase):
         """
         if not self.model:
             logger.error("model has not been trained yet")
-            return {}
+            return []
 
         predictions = []
 
@@ -184,10 +127,73 @@ class SpacyModel(LabelStudioMLBase):
         annotations_to_docbin(
             dev_data, valid_labels=self.labels).to_disk(dev_data_path)
 
-        train(config_path, checkpoint_dir, use_gpu=USE_GPU_TRAIN, overrides={
+        train(config_path, checkpoint_dir, use_gpu=TRAIN_GPU_ID, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
 
         os.symlink(model_path, latest_path_tmp)
         os.replace(latest_path_tmp, latest_path)
 
         return {'model_path': model_path, 'checkpoint': checkpoint_name}
+
+# Helper functions
+
+
+def item_not_cancelled(item):
+    return item['annotations'][0]['was_cancelled'] != True
+
+
+def split_annotations(annotations, split):
+    random.shuffle(annotations)
+
+    dev_len = round(len(annotations) * split)
+    train_data = annotations[dev_len:]
+    dev_data = annotations[:dev_len]
+
+    return train_data, dev_data
+
+
+def annotations_to_docbin(annotations, valid_labels: list[str],):
+    nlp = spacy.blank("en")
+    db = DocBin()
+
+    for item in annotations:
+        if not item['data']['text']:
+            continue
+
+        doc = nlp(item['data']['text'])
+        annotation = item['annotations'][0]
+
+        for a in annotation['result']:
+            if a['type'] == 'labels':
+                add_label_to_doc(doc, item, a, valid_labels)
+            elif a['type'] == 'choices':
+                add_cat_to_doc(doc, a, valid_labels)
+
+        db.add(doc)
+
+    return db
+
+
+def add_label_to_doc(doc: Doc, item, annotation, valid_labels: list[str]):
+    val = annotation['value']
+    label = val['labels'][0]
+
+    if label not in valid_labels:
+        return
+
+    span = doc.char_span(
+        val['start'], val['end'], label=label)
+    if span:
+        doc.ents = doc.ents + (span,)
+    else:
+        text = item['data']['text']
+        logger.info("BAD SPAN: %s DOC ID: %s",
+                    text[val['start']:val['end']], item['id'])
+
+
+def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
+    val = annotation['value']
+    selected = val['choices']
+
+    for choice in valid_choices:
+        doc.cats[choice] = choice in selected
