@@ -121,9 +121,8 @@ class SpacyModel(LabelStudioMLBase):
 
         predictions = []
 
-        for task in tasks:
-            doc = self.model(task['data']['text'])
-
+        docs = self.model.pipe([t['data']['text'] for t in tasks])
+        for doc in docs:
             results = []
             for e in doc.ents:
                 results.append({
