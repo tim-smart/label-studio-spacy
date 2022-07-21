@@ -157,7 +157,7 @@ class SpacyModel(LabelStudioMLBase):
 
         return predictions
 
-    def fit(self, annotations, **kwargs):
+    def fit(self, annotations, workdir=None, **kwargs):
         """ This is where training happens: train your model given list of annotations, 
             then returns dict with created links and resources
         """
