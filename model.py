@@ -25,7 +25,7 @@ def item_not_cancelled(item):
     return item['annotations'][0]['was_cancelled'] != True
 
 
-def split_annotations(annotations, split=DEV_DATA_SPLIT):
+def split_annotations(annotations, split):
     random.shuffle(annotations)
 
     dev_len = round(len(annotations) * split)
@@ -100,7 +100,7 @@ class SpacyModel(LabelStudioMLBase):
     def latest_model(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
         fallback_dir = os.path.join(model_dir, "model-best")
-        
+
         if USE_GPU > -1:
             spacy.require_gpu(gpu_id=USE_GPU)
 
@@ -157,7 +157,7 @@ class SpacyModel(LabelStudioMLBase):
 
         return predictions
 
-    def fit(self, annotations, workdir=None, dev_split=0.15, **kwargs):
+    def fit(self, annotations, **kwargs):
         """ This is where training happens: train your model given list of annotations, 
             then returns dict with created links and resources
         """
@@ -177,13 +177,12 @@ class SpacyModel(LabelStudioMLBase):
 
         annotations = list(filter(item_not_cancelled, list(annotations)))
 
-        train_data, dev_data = split_annotations(annotations, dev_split)
+        train_data, dev_data = split_annotations(annotations, DEV_DATA_SPLIT)
         annotations_to_docbin(
             train_data, valid_labels=self.labels).to_disk(train_data_path)
         annotations_to_docbin(
             dev_data, valid_labels=self.labels).to_disk(dev_data_path)
 
-        print(train_data_path, dev_data_path)
         train(config_path, checkpoint_dir, use_gpu=USE_GPU, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
 
