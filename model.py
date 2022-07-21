@@ -16,7 +16,7 @@ TRAIN_GPU_ID = -1
 PREDICTION_GPU_ID = -1
 
 # Fraction of data to use for evaluation
-DEV_DATA_SPLIT = 0.1
+EVAL_SPLIT = 0.2
 
 # Score threshold for a category to be accepted
 TEXTCAT_SCORE_THRESHOLD = 0.5
@@ -121,7 +121,7 @@ class SpacyModel(LabelStudioMLBase):
 
         annotations = list(filter(item_not_cancelled, list(annotations)))
 
-        train_data, dev_data = split_annotations(annotations, DEV_DATA_SPLIT)
+        train_data, dev_data = split_annotations(annotations, EVAL_SPLIT)
         annotations_to_docbin(
             train_data, valid_labels=self.labels).to_disk(train_data_path)
         annotations_to_docbin(
