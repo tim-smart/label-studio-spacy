@@ -182,7 +182,7 @@ def add_label_to_doc(doc: Doc, item, annotation, valid_labels: list[str]):
         return
 
     span = doc.char_span(
-        val['start'], val['end'], label=label)
+        val['start'], val['end'], label=label, alignment_mode='expand')
     if span:
         doc.ents = doc.ents + (span,)
     else:
