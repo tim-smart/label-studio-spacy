@@ -11,8 +11,10 @@ from spacy.tokens import DocBin, Doc
 
 # Constants
 
+USE_GPU_TRAIN = -1
+USE_GPU_PREDICT = -1
+
 DEV_DATA_SPLIT = 0.1
-USE_GPU = -1
 TEXTCAT_SCORE_THRESHOLD = 0.5
 
 # END constants
@@ -92,17 +94,17 @@ class SpacyModel(LabelStudioMLBase):
         self.from_name = from_name
         self.to_name = schema['to_name'][0]
         self.labels = schema['labels'] if 'labels' in schema else []
-        self.model = self.latest_model()
+        self.model = self.load()
         self.model_version = self.train_output['checkpoint'] if 'checkpoint' in self.train_output else 'fallback'
 
         logger.info("MODEL CHECKPOINT: %s", self.model_version)
 
-    def latest_model(self):
+    def load(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
         fallback_dir = os.path.join(model_dir, "model-best")
 
-        if USE_GPU > -1:
-            spacy.require_gpu(gpu_id=USE_GPU)
+        if USE_GPU_PREDICT > -1:
+            spacy.prefer_gpu(gpu_id=USE_GPU_PREDICT)
 
         if 'model_path' in self.train_output and os.path.isdir(self.train_output['model_path']):
             return spacy.load(self.train_output['model_path'])
@@ -182,7 +184,7 @@ class SpacyModel(LabelStudioMLBase):
         annotations_to_docbin(
             dev_data, valid_labels=self.labels).to_disk(dev_data_path)
 
-        train(config_path, checkpoint_dir, use_gpu=USE_GPU, overrides={
+        train(config_path, checkpoint_dir, use_gpu=USE_GPU_TRAIN, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
 
         os.symlink(model_path, latest_path_tmp)
