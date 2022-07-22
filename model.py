@@ -21,9 +21,6 @@ EVAL_SPLIT = 0.2
 # Score threshold for a category to be accepted
 TEXTCAT_SCORE_THRESHOLD = 0.5
 
-# Batch size for predictions
-PREDICTION_BATCH_SIZE = 16
-
 # END constants
 
 logger = logging.getLogger(__name__)
@@ -69,8 +66,9 @@ class SpacyModel(LabelStudioMLBase):
 
         predictions = []
 
-        docs = self.model.pipe([t['data']['text'] for t in tasks], batch_size=PREDICTION_BATCH_SIZE)
-        for doc in docs:
+        for task in tasks:
+            doc = self.model(task['data']['text'])
+
             results = []
             for e in doc.ents:
                 results.append({
@@ -185,7 +183,7 @@ def add_label_to_doc(doc: Doc, item, annotation, valid_labels: list[str]):
         return
 
     span = doc.char_span(
-        val['start'], val['end'], label=label, alignment_mode='expand')
+        val['start'], val['end'], label=label)
     if span:
         doc.ents = doc.ents + (span,)
     else:
