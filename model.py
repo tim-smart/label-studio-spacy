@@ -19,8 +19,8 @@ PREDICTION_GPU_ID = -1
 EVAL_SPLIT = 0.2
 
 # Score threshold for a category to be accepted
-TEXTCAT_MULTI = False
 TEXTCAT_SCORE_THRESHOLD = 0.5
+TEXTCAT_MULTI = False
 
 # Batch size for predictions
 PREDICTION_BATCH_SIZE = 16
@@ -70,7 +70,8 @@ class SpacyModel(LabelStudioMLBase):
 
         predictions = []
 
-        docs = self.model.pipe([t['data']['text'] for t in tasks], batch_size=PREDICTION_BATCH_SIZE)
+        docs = self.model.pipe([t['data']['text']
+                               for t in tasks], batch_size=PREDICTION_BATCH_SIZE)
         for doc in docs:
             results = []
             for e in doc.ents:
@@ -210,4 +211,3 @@ def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
 
     for choice in valid_choices:
         doc.cats[choice] = choice in selected
-
