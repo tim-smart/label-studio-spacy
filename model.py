@@ -175,7 +175,7 @@ def annotations_to_docbin(annotations, valid_labels: list[str],):
                 validate_cats = True
                 add_cat_to_doc(doc, a, valid_labels)
 
-        if validate_cats && TEXTCAT_MULTI == False:
+        if validate_cats and TEXTCAT_MULTI == False:
             choices = [choice for choice, val in doc.cats.items()
                        if val == True]
 
