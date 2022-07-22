@@ -19,6 +19,7 @@ PREDICTION_GPU_ID = -1
 EVAL_SPLIT = 0.2
 
 # Score threshold for a category to be accepted
+TEXTCAT_MULTI = False
 TEXTCAT_SCORE_THRESHOLD = 0.5
 
 # Batch size for predictions
@@ -165,12 +166,21 @@ def annotations_to_docbin(annotations, valid_labels: list[str],):
 
         doc = nlp(item['data']['text'])
         annotation = item['annotations'][0]
+        validate_cats = False
 
         for a in annotation['result']:
             if a['type'] == 'labels':
                 add_label_to_doc(doc, item, a, valid_labels)
             elif a['type'] == 'choices':
+                validate_cats = True
                 add_cat_to_doc(doc, a, valid_labels)
+
+        if validate_cats && TEXTCAT_MULTI = False:
+            choices = [choice for choice, val in doc.cats.items()
+                       if val == True]
+
+            if len(choices) != 1:
+                continue
 
         db.add(doc)
 
@@ -200,3 +210,4 @@ def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
 
     for choice in valid_choices:
         doc.cats[choice] = choice in selected
+
