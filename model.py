@@ -1,3 +1,4 @@
+from cProfile import label
 import logging
 import os
 import random
@@ -11,6 +12,13 @@ from spacy.tokens import DocBin, Doc
 
 # Constants
 
+# Map `from_name` to spacy model layers
+LABEL_CONFIG = {
+    'ner': [],
+    'spancat': [],
+    'textcat': []
+}
+
 # GPU ID's to use. -1 means use the CPU
 TRAIN_GPU_ID = -1
 PREDICTION_GPU_ID = -1
@@ -18,12 +26,14 @@ PREDICTION_GPU_ID = -1
 # Fraction of data to use for evaluation
 EVAL_SPLIT = 0.2
 
-# Score threshold for a category to be accepted
-TEXTCAT_SCORE_THRESHOLD = 0.5
-TEXTCAT_MULTI = False
-
 # Batch size for predictions
 PREDICTION_BATCH_SIZE = 16
+
+# Score threshold for a category to be accepted
+TEXTCAT_SCORE_THRESHOLD = 0.5
+
+# Multiple categories per doc?
+TEXTCAT_MULTI = False
 
 # END constants
 
@@ -37,14 +47,19 @@ class SpacyModel(LabelStudioMLBase):
     def __init__(self, **kwargs):
         super(SpacyModel, self).__init__(**kwargs)
 
-        from_name, schema = list(self.parsed_label_config.items())[0]
-        self.from_name = from_name
-        self.to_name = schema['to_name'][0]
-        self.labels = schema['labels'] if 'labels' in schema else []
         self.model = self.load()
         self.model_version = self.train_output['checkpoint'] if 'checkpoint' in self.train_output else 'fallback'
 
         logger.info("MODEL CHECKPOINT: %s", self.model_version)
+
+    def ner_labels(self):
+        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['ner'])
+
+    def spancat_labels(self):
+        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['spancat'])
+
+    def textcat_labels(self):
+        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['textcat'])
 
     def load(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
@@ -68,16 +83,21 @@ class SpacyModel(LabelStudioMLBase):
             logger.error("model has not been trained yet")
             return []
 
+        ner_labels = self.ner_labels()
+        spancat_labels = self.spancat_labels()
+        textcat_labels = self.textcat_labels()
         predictions = []
 
         docs = self.model.pipe([t['data']['text']
                                for t in tasks], batch_size=PREDICTION_BATCH_SIZE)
         for doc in docs:
             results = []
+
             for e in doc.ents:
+                config = ner_labels[e.label_]
                 results.append({
-                    'from_name': self.from_name,
-                    'to_name': self.to_name,
+                    'from_name': config['from_name'],
+                    'to_name': config['to_name'],
                     'type': 'labels',
                     'value': {
                         'start': e.start_char,
@@ -87,12 +107,28 @@ class SpacyModel(LabelStudioMLBase):
                     }
                 })
 
+            for from_name, span_group in doc.spans:
+                for span in span_group:
+                    to_name = spancat_labels[span.label_]['to_name']
+                    results.append({
+                        'from_name': from_name,
+                        'to_name': to_name,
+                        'type': 'labels',
+                        'value': {
+                            'start': span.start_char,
+                            'end': span.end_char,
+                            'text': span.text,
+                            'labels': [span.label_]
+                        }
+                    })
+
             choices = [choice for choice, score in doc.cats.items()
                        if score >= TEXTCAT_SCORE_THRESHOLD]
             if len(choices) > 0:
+                config = textcat_labels[choices[0]]
                 results.append({
-                    'from_name': self.from_name,
-                    'to_name': self.to_name,
+                    'from_name': config['from_name'],
+                    'to_name': config['to_name'],
                     'type': 'choices',
                     'value': {
                         'choices': choices
@@ -127,10 +163,20 @@ class SpacyModel(LabelStudioMLBase):
         annotations = list(filter(item_not_cancelled, list(annotations)))
 
         train_data, dev_data = split_annotations(annotations, EVAL_SPLIT)
+
         annotations_to_docbin(
-            train_data, valid_labels=self.labels).to_disk(train_data_path)
+            train_data,
+            ner_labels=self.ner_labels(),
+            spancat_labels=self.spancat_labels(),
+            textcat_labels=self.textcat_labels()
+        ).to_disk(train_data_path)
+
         annotations_to_docbin(
-            dev_data, valid_labels=self.labels).to_disk(dev_data_path)
+            dev_data,
+            ner_labels=self.ner_labels(),
+            spancat_labels=self.spancat_labels(),
+            textcat_labels=self.textcat_labels()
+        ).to_disk(dev_data_path)
 
         train(config_path, checkpoint_dir, use_gpu=TRAIN_GPU_ID, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
@@ -141,6 +187,23 @@ class SpacyModel(LabelStudioMLBase):
         return {'model_path': model_path, 'checkpoint': checkpoint_name}
 
 # Helper functions
+
+
+def label_dict_from_config(config, from_names: list[str]):
+    map = {}
+
+    for from_name in from_names:
+        schema = config[from_name]
+        to_name = schema['to_name'][0]
+        labels = schema['labels']
+
+        for label in labels:
+            map[label] = {
+                'from_name': from_name,
+                'to_name': to_name
+            }
+
+    return map
 
 
 def item_not_cancelled(item):
@@ -157,10 +220,9 @@ def split_annotations(annotations, split):
     return train_data, dev_data
 
 
-def annotations_to_docbin(annotations, valid_labels: list[str]):
+def annotations_to_docbin(annotations, ner_labels, spancat_labels, textcat_labels):
     nlp = spacy.blank("en")
     db = DocBin()
-    cats_required = False
 
     docs = []
     for item in annotations:
@@ -172,42 +234,51 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
 
         for a in annotation['result']:
             if a['type'] == 'labels':
-                add_label_to_doc(doc, item, a, valid_labels)
+                add_span_to_doc(
+                    doc,
+                    item,
+                    a,
+                    ner_labels=ner_labels,
+                    spancat_labels=spancat_labels
+                )
             elif a['type'] == 'choices':
-                cats_required = True
-                add_cat_to_doc(doc, a, valid_labels)
+                add_cat_to_doc(doc, a, textcat_labels)
 
         docs.append(doc)
 
     for doc in docs:
-        if TEXTCAT_MULTI == True or cats_required == False or doc_has_one_cat(doc):
+        if TEXTCAT_MULTI == True or textcat_labels or doc_has_one_cat(doc):
             db.add(doc)
 
     return db
 
 
-def add_label_to_doc(doc: Doc, item, annotation, valid_labels: list[str]):
+def add_span_to_doc(doc: Doc, annotation, ner_labels, spancat_labels):
     val = annotation['value']
     label = val['labels'][0]
 
-    if label not in valid_labels:
+    if label not in ner_labels or label not in spancat_labels:
         return
 
     span = doc.char_span(
         val['start'], val['end'], label=label, alignment_mode='expand')
-    if span:
+
+    if span and label in ner_labels:
         doc.ents = doc.ents + (span,)
-    else:
-        text = item['data']['text']
-        logger.info("BAD SPAN: %s DOC ID: %s",
-                    text[val['start']:val['end']], item['id'])
+
+    elif span and label in spancat_labels:
+        from_name = spancat_labels[label]['from_name']
+        if from_name in doc.spans:
+            doc.spans[from_name].append(span)
+        else:
+            doc.spans[from_name] = [span]
 
 
-def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
+def add_cat_to_doc(doc: Doc, annotation, label_dict):
     val = annotation['value']
     selected = val['choices']
 
-    for choice in valid_choices:
+    for choice in label_dict.keys():
         doc.cats[choice] = choice in selected
 
 
