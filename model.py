@@ -177,6 +177,8 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
                 cats_required = True
                 add_cat_to_doc(doc, a, valid_labels)
 
+        docs.append(doc)
+
     for doc in docs:
         if TEXTCAT_MULTI == True or cats_required == False or doc_has_one_cat(doc):
             db.add(doc)
