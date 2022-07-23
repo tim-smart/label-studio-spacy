@@ -157,9 +157,10 @@ def split_annotations(annotations, split):
     return train_data, dev_data
 
 
-def annotations_to_docbin(annotations, valid_labels: list[str],):
+def annotations_to_docbin(annotations, valid_labels: list[str]):
     nlp = spacy.blank("en")
     db = DocBin()
+    cats_required = False
 
     for item in annotations:
         if not item['data']['text']:
@@ -167,23 +168,16 @@ def annotations_to_docbin(annotations, valid_labels: list[str],):
 
         doc = nlp(item['data']['text'])
         annotation = item['annotations'][0]
-        validate_cats = False
 
         for a in annotation['result']:
             if a['type'] == 'labels':
                 add_label_to_doc(doc, item, a, valid_labels)
             elif a['type'] == 'choices':
-                validate_cats = True
+                cats_required = True
                 add_cat_to_doc(doc, a, valid_labels)
 
-        if validate_cats and TEXTCAT_MULTI == False:
-            choices = [choice for choice, val in doc.cats.items()
-                       if val == True]
-
-            if len(choices) != 1:
-                continue
-
-        db.add(doc)
+        if doc_is_valid(doc, textcat_multi=TEXTCAT_MULTI, cats_required=cats_required):
+            db.add(doc)
 
     return db
 
@@ -211,3 +205,9 @@ def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
 
     for choice in valid_choices:
         doc.cats[choice] = choice in selected
+
+
+def doc_is_valid(doc: Doc, textcat_multi=False, cats_required=False):
+    positive_cats = [cat for cat, val in doc.cats.items() if val == True]
+    cats_valid = textcat_multi or len(positive_cats) == 1
+    return cats_valid if cats_required else True
