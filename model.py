@@ -55,7 +55,7 @@ class SpacyModel(LabelStudioMLBase):
         map = {}
         from_names = [name for names in LABEL_CONFIG.values()
                       for name in names]
-        for from_name, schema in self.parsed_label_config:
+        for from_name, schema in self.parsed_label_config.items():
             if from_name in from_names:
                 continue
 
@@ -98,7 +98,7 @@ class SpacyModel(LabelStudioMLBase):
         """
         if not self.model:
             logger.error("model has not been trained yet")
-            return []
+            return {}
 
         ner_labels = self.ner_labels()
         spancat_labels = self.spancat_labels()
@@ -275,7 +275,7 @@ def add_span_to_doc(doc: Doc, annotation, ner_labels, spancat_labels):
     val = annotation['value']
     label = val['labels'][0]
 
-    if label not in ner_labels or label not in spancat_labels:
+    if label not in ner_labels and label not in spancat_labels:
         return
 
     span = doc.char_span(val['start'], val['end'], label=label)
