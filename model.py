@@ -1,4 +1,3 @@
-from cProfile import label
 import logging
 import os
 import random
@@ -12,19 +11,12 @@ from spacy.tokens import DocBin, Doc
 
 # Constants
 
-# Map `from_name` to spacy model layers
-LABEL_CONFIG = {
-    'ner': [],
-    'spancat': [],
-    'textcat': []
-}
-
 # GPU ID's to use. -1 means use the CPU
 TRAIN_GPU_ID = -1
 PREDICTION_GPU_ID = -1
 
 # Fraction of data to use for evaluation
-EVAL_SPLIT = 0.2
+EVAL_SPLIT = 0.15
 
 # Batch size for predictions
 PREDICTION_BATCH_SIZE = 16
@@ -34,6 +26,13 @@ TEXTCAT_SCORE_THRESHOLD = 0.5
 
 # Multiple categories per doc?
 TEXTCAT_MULTI = False
+
+# Map `from_name` to spacy model layers
+LABEL_CONFIG = {
+    'ner': [],
+    'spancat': [],
+    'textcat': []
+}
 
 # END constants
 
@@ -52,14 +51,32 @@ class SpacyModel(LabelStudioMLBase):
 
         logger.info("MODEL CHECKPOINT: %s", self.model_version)
 
+    def misc_labels(self):
+        map = {}
+        from_names = [name for names in LABEL_CONFIG.values()
+                      for name in names]
+        for from_name, schema in self.parsed_label_config:
+            if from_name in from_names:
+                continue
+
+            for label in schema['labels']:
+                map[label] = {
+                    'from_name': from_name,
+                    'to_name': schema['to_name'][0],
+                }
+        return map
+
     def ner_labels(self):
-        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['ner'])
+        return self.misc_labels() | label_dict_from_config(
+            self.parsed_label_config, LABEL_CONFIG['ner'])
 
     def spancat_labels(self):
-        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['spancat'])
+        return self.misc_labels() | label_dict_from_config(
+            self.parsed_label_config, LABEL_CONFIG['spancat'])
 
     def textcat_labels(self):
-        return label_dict_from_config(self.parsed_label_config, LABEL_CONFIG['textcat'])
+        return self.misc_labels() | label_dict_from_config(
+            self.parsed_label_config, LABEL_CONFIG['textcat'])
 
     def load(self):
         model_dir = os.path.dirname(os.path.realpath(__file__))
@@ -223,6 +240,7 @@ def split_annotations(annotations, split):
 def annotations_to_docbin(annotations, ner_labels, spancat_labels, textcat_labels):
     nlp = spacy.blank("en")
     db = DocBin()
+    has_textcat = False
 
     docs = []
     for item in annotations:
@@ -236,18 +254,18 @@ def annotations_to_docbin(annotations, ner_labels, spancat_labels, textcat_label
             if a['type'] == 'labels':
                 add_span_to_doc(
                     doc,
-                    item,
-                    a,
+                    annotation=a,
                     ner_labels=ner_labels,
                     spancat_labels=spancat_labels
                 )
             elif a['type'] == 'choices':
+                has_textcat = True
                 add_cat_to_doc(doc, a, textcat_labels)
 
         docs.append(doc)
 
     for doc in docs:
-        if TEXTCAT_MULTI == True or textcat_labels or doc_has_one_cat(doc):
+        if has_textcat == False or TEXTCAT_MULTI == True or doc_has_one_cat(doc):
             db.add(doc)
 
     return db
@@ -260,8 +278,7 @@ def add_span_to_doc(doc: Doc, annotation, ner_labels, spancat_labels):
     if label not in ner_labels or label not in spancat_labels:
         return
 
-    span = doc.char_span(
-        val['start'], val['end'], label=label, alignment_mode='expand')
+    span = doc.char_span(val['start'], val['end'], label=label)
 
     if span and label in ner_labels:
         doc.ents = doc.ents + (span,)
