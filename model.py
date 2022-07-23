@@ -162,6 +162,7 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
     db = DocBin()
     cats_required = False
 
+    docs = []
     for item in annotations:
         if not item['data']['text']:
             continue
@@ -176,7 +177,8 @@ def annotations_to_docbin(annotations, valid_labels: list[str]):
                 cats_required = True
                 add_cat_to_doc(doc, a, valid_labels)
 
-        if doc_is_valid(doc, textcat_multi=TEXTCAT_MULTI, cats_required=cats_required):
+    for doc in docs:
+        if TEXTCAT_MULTI == True or cats_required == False or doc_has_one_cat(doc):
             db.add(doc)
 
     return db
@@ -207,7 +209,6 @@ def add_cat_to_doc(doc: Doc, annotation, valid_choices: list[str]):
         doc.cats[choice] = choice in selected
 
 
-def doc_is_valid(doc: Doc, textcat_multi=False, cats_required=False):
+def doc_has_one_cat(doc: Doc):
     positive_cats = [cat for cat, val in doc.cats.items() if val == True]
-    cats_valid = textcat_multi or len(positive_cats) == 1
-    return cats_valid if cats_required else True
+    return len(positive_cats) == 1
