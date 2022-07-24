@@ -27,12 +27,15 @@ TEXTCAT_SCORE_THRESHOLD = 0.5
 # Multiple categories per doc?
 TEXTCAT_MULTI = False
 
-# Map `from_name` to spacy model layers
+# Assign annotation groups to spacy components
 LABEL_CONFIG = {
     'ner': [],
     'spancat': [],
     'textcat': []
 }
+
+# SpanGroup key to use for the spancat spans
+SPANCAT_KEY = 'sc'
 
 # END constants
 
@@ -124,12 +127,12 @@ class SpacyModel(LabelStudioMLBase):
                     }
                 })
 
-            for from_name, span_group in doc.spans:
-                for span in span_group:
-                    to_name = spancat_labels[span.label_]['to_name']
+            for SPANCAT_KEY in doc.spans:
+                for span in doc.spans[SPANCAT_KEY]:
+                    config = spancat_labels[span.label_]
                     results.append({
-                        'from_name': from_name,
-                        'to_name': to_name,
+                        'from_name': config['from_name'],
+                        'to_name': config['to_name'],
                         'type': 'labels',
                         'value': {
                             'start': span.start_char,
@@ -285,10 +288,10 @@ def add_span_to_doc(doc: Doc, annotation, ner_labels, spancat_labels):
 
     elif span and label in spancat_labels:
         from_name = spancat_labels[label]['from_name']
-        if from_name in doc.spans:
-            doc.spans[from_name].append(span)
+        if SPANCAT_KEY in doc.spans:
+            doc.spans[SPANCAT_KEY].append(span)
         else:
-            doc.spans[from_name] = [span]
+            doc.spans[SPANCAT_KEY] = [span]
 
 
 def add_cat_to_doc(doc: Doc, annotation, label_dict):
