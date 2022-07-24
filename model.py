@@ -198,6 +198,17 @@ class SpacyModel(LabelStudioMLBase):
             textcat_labels=self.textcat_labels()
         ).to_disk(dev_data_path)
 
+        # try and free GPU memory for training
+        if TRAIN_GPU_ID > -1:
+            try:
+                import gc
+                import torch
+                self.model = None
+                gc.collect()
+                torch.cuda.empty_cache()
+            except:
+                pass
+
         train(config_path, checkpoint_dir, use_gpu=TRAIN_GPU_ID, overrides={
               'paths.train': train_data_path, 'paths.dev': dev_data_path})
 
@@ -287,7 +298,6 @@ def add_span_to_doc(doc: Doc, annotation, ner_labels, spancat_labels):
         doc.ents = doc.ents + (span,)
 
     elif span and label in spancat_labels:
-        from_name = spancat_labels[label]['from_name']
         if SPANCAT_KEY in doc.spans:
             doc.spans[SPANCAT_KEY].append(span)
         else:
