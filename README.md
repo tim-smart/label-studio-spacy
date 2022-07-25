@@ -2,6 +2,8 @@
 
 Power up Label Studio with ner and textcat spacy models.
 
+## Demo video
+
 [![Demo video](https://img.youtube.com/vi/F19NT-21uT4/0.jpg)](https://youtu.be/F19NT-21uT4)
 
 ## Usage
@@ -29,3 +31,4 @@ label-studio-ml start my_ml_backend
 ```
 
 6. As you train new models, they will appear in a `checkpoints` directory. The latest checkpoint will be symlinked to `latest-model`.
+
