@@ -2,6 +2,8 @@
 
 Power up Label Studio with ner and textcat spacy models.
 
+[![Demo video](https://img.youtube.com/vi/F19NT-21uT4/maxresdefault.jpg)](https://youtu.be/T-D1KVIuvjA)
+
 ## Usage
 
 1. Clone this repo
