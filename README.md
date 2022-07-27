@@ -1,6 +1,11 @@
 # spaCy powered Label Studio ML backend
 
-Power up Label Studio with ner and textcat spacy models.
+spaCy integration for Label Studio.
+
+Benefits:
+
+* Speed up annotation of data with integrated predictions
+* Quickly iterate on your spaCy models
 
 ## Demo video
 
