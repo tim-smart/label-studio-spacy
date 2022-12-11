@@ -1,6 +1,6 @@
 # spaCy powered Label Studio ML backend
 
-spaCy integration for Label Studio.
+spaCy integration for Label Studio. Created as an Open Source alternative to Prodigy.
 
 Benefits:
 
