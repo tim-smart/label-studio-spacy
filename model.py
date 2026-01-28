@@ -1,3 +1,4 @@
+from typing import ClassVar
 import logging
 import os
 import random
@@ -44,7 +45,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class SpacyModel(LabelStudioMLBase):
-    TRAIN_EVENTS = ()
+    TRAIN_EVENTS: ClassVar[tuple[str]] = ("START_TRAINING",)
 
     def __init__(self, **kwargs):
         super(SpacyModel, self).__init__(**kwargs)
